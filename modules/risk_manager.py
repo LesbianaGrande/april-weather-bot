@@ -3,6 +3,11 @@ from datetime import datetime, timedelta, date
 from config.settings import LOSS_THRESHOLD, LOSS_WINDOW_DAYS, DEFAULT_SHARES, REDUCED_SHARES, MAX_TRADES_PER_MARKET_PER_DAY
 from database.models import Trade, DailyTradeCount
 
+
+class RiskManager:
+    """Namespace object passed to strategies; actual logic uses module-level functions."""
+    pass
+
 logger = logging.getLogger(__name__)
 
 
