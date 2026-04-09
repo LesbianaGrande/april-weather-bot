@@ -29,8 +29,14 @@ def test_api_connectivity(url: str) -> dict:
 
 
 @router.get("/health")
-async def health_check(request: Request):
-    """System health status."""
+async def health_check():
+    """Lightweight Railway healthcheck — returns immediately."""
+    return {"status": "ok"}
+
+
+@router.get("/health/detail")
+async def health_detail(request: Request):
+    """Full system health dashboard."""
     try:
         # Check scheduler
         scheduler_running = is_running()
@@ -65,7 +71,7 @@ async def health_check(request: Request):
             "current_time": datetime.utcnow().isoformat(),
         })
     except Exception as e:
-        logger.error(f"Error rendering health: {e}", exc_info=True)
+        logger.error(f"Error rendering health detail: {e}", exc_info=True)
         return templates.TemplateResponse("health.html", {
             "request": request,
             "error": str(e),
