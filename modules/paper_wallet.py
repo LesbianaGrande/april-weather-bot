@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
+class PaperWallet:
+    """Namespace object passed to strategies; actual logic uses module-level functions."""
+    pass
+
+
 def get_wallet(strategy_id: str, db: Session) -> Optional[Wallet]:
     """Get or create a wallet for a strategy."""
     wallet = db.query(Wallet).filter(Wallet.strategy_id == strategy_id).first()
