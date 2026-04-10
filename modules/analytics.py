@@ -95,3 +95,115 @@ def get_city_stats(strategy_id: str, db) -> list:
         })
 
     return sorted(results, key=lambda x: x["total_pnl"], reverse=True)
+
+
+def get_daily_pnl(strategy_id: str, db, days: int = 30) -> list:
+    """Daily P&L for the last N days."""
+    trades = db.query(Trade).filter(
+        Trade.strategy_id == strategy_id,
+        Trade.status.in_(["won", "lost"]),
+        Trade.resolved_at >= datetime.utcnow() - timedelta(days=days)
+    ).all()
+
+    daily_map = {}
+    for trade in trades:
+        if trade.resolved_at:
+            day = trade.resolved_at.date()
+            if day not in daily_map:
+                daily_map[day] = 0
+            daily_map[day] += trade.pnl if trade.pnl else 0
+
+    results = []
+    cumulative = 0
+    for i in range(days, -1, -1):
+        current_date = (datetime.utcnow() - timedelta(days=i)).date()
+        daily_pnl = daily_map.get(current_date, 0)
+        cumulative += daily_pnl
+        results.append({
+            "date": current_date.isoformat(),
+            "pnl": round(daily_pnl, 2),
+            "cumulative_pnl": round(cumulative, 2)
+        })
+
+    return results
+
+
+def get_recent_trades(db, limit: int = 20, strategy_id: str = None) -> list:
+    """Recent trades for the dashboard."""
+    query = db.query(Trade).order_by(Trade.opened_at.desc()).limit(limit)
+
+    if strategy_id:
+        query = query.filter(Trade.strategy_id == strategy_id)
+
+    trades = query.all()
+
+    results = []
+    for trade in trades:
+        results.append({
+            "id": trade.id,
+            "date": trade.opened_at.isoformat(),
+            "strategy": trade.strategy_id,
+            "city": trade.city,
+            "question": trade.question[:50] + "..." if len(trade.question) > 50 else trade.question,
+            "shares": trade.shares,
+            "fill_price": round(trade.avg_fill_price, 4),
+            "cost": round(trade.total_cost, 2),
+            "status": trade.status,
+            "pnl": round(trade.pnl, 2) if trade.pnl else None
+        })
+
+    return results
+
+
+def get_scheduler_health(db) -> dict:
+    """Last run times and statuses for each job."""
+    jobs = {}
+
+    for job_name in ["trade_scan", "resolution_check"]:
+        log = db.query(SchedulerLog).filter(SchedulerLog.job_name == job_name).order_by(SchedulerLog.run_at.desc()).first()
+
+        if log:
+            jobs[job_name] = {
+                "last_run": log.run_at.isoformat(),
+                "status": log.status,
+                "message": log.message,
+                "trades_executed": log.trades_executed,
+                "resolutions_processed": log.resolutions_processed,
+                "duration": log.duration_seconds
+            }
+        else:
+            jobs[job_name] = {
+                "last_run": None,
+                "status": "never",
+                "message": "No runs yet",
+                "trades_executed": 0,
+                "resolutions_processed": 0,
+                "duration": 0
+            }
+
+    return jobs
+
+
+def get_trades_per_day(db, days: int = 30) -> list:
+    """Trades per day for the last N days."""
+    trades = db.query(Trade).filter(
+        Trade.opened_at >= datetime.utcnow() - timedelta(days=days)
+    ).all()
+
+    daily_map = {}
+    for trade in trades:
+        day = trade.opened_at.date()
+        if day not in daily_map:
+            daily_map[day] = 0
+        daily_map[day] += 1
+
+    results = []
+    for i in range(days, -1, -1):
+        current_date = (datetime.utcnow() - timedelta(days=i)).date()
+        count = daily_map.get(current_date, 0)
+        results.append({
+            "date": current_date.isoformat(),
+            "count": count
+        })
+
+    return results
