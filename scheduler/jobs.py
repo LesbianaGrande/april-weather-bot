@@ -22,8 +22,8 @@ def setup_scheduler(strategies, resolution_checker_instance):
     _resolution_checker = resolution_checker_instance
 
     # Parse hours from config
-    scan_hours = [int(h.strip()) for h in TRADE_SCAN_HOURS.split(",")]
-    resolution_hours = [int(h.strip()) for h in RESOLUTION_CHECK_HOURS.split(",")]
+    scan_hours = ",".join(str(int(h.strip())) for h in TRADE_SCAN_HOURS.split(","))
+    resolution_hours = ",".join(str(int(h.strip())) for h in RESOLUTION_CHECK_HOURS.split(","))
 
     # Add jobs
     _scheduler.add_job(
