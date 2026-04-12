@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from database.db import get_db_session
 from modules.analytics import get_wallet_stats, get_recent_trades, get_scheduler_health
 from dashboard.app import templates
@@ -35,3 +36,12 @@ async def index(request: Request):
             "recent_trades": [],
             "health": {},
         })
+
+@router.post("/scan")
+async def manual_scan(request: Request):
+    """Trigger a manual trade scan immediately."""
+    import threading
+    from scheduler.jobs import run_trade_scan
+    thread = threading.Thread(target=run_trade_scan, daemon=True)
+    thread.start()
+    return JSONResponse({"status": "ok", "message": "Manual scan started in background"})
