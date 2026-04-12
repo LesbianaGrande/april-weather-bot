@@ -20,12 +20,12 @@ class OrderBook:
                     logger.warning(f"Order book request failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying...")
                     time.sleep(API_RETRY_DELAY)
                 else:
-                    logger.error(f"Order book request failed after {max_retries} attempts: {e}")
+                    logger.warning(f"Order book request failed after {max_retries} attempts: {e}")
                     return None
 
     def fetch_order_book(self, token_id: str) -> Optional[dict]:
-        """Fetch order book for a token."""
-        url = f"{CLOB_API_BASE}/order-book?token_id={token_id}"
+        """Fetch order book for a token. Tries /book endpoint (Polymarket CLOB API)."""
+        url = f"{CLOB_API_BASE}/book?token_id={token_id}"
         return self._make_request(url)
 
     def get_best_ask(self, token_id: str) -> Optional[float]:
@@ -33,11 +33,9 @@ class OrderBook:
         order_book = self.fetch_order_book(token_id)
         if not order_book:
             return None
-
         asks = order_book.get("asks", [])
         if not asks:
             return None
-
         try:
             best_ask = min(float(ask.get("price", 999)) for ask in asks)
             return best_ask
@@ -49,33 +47,51 @@ class OrderBook:
         order_book = self.fetch_order_book(token_id)
         if not order_book:
             return None
-
         bids = order_book.get("bids", [])
         if not bids:
             return None
-
         try:
             best_bid = max(float(bid.get("price", 0)) for bid in bids)
             return best_bid
         except (ValueError, TypeError):
             return None
 
-    def simulate_buy(self, token_id: str, num_shares: int) -> Optional[dict]:
+    def simulate_buy(self, token_id: str, num_shares: int,
+                     fallback_price: Optional[float] = None) -> Optional[dict]:
         """
         Simulate buying num_shares at the ask price.
-        Returns: {"avg_fill_price": float, "total_cost": float, "fills": list, "best_ask": float, "sufficient_liquidity": bool}
-        Returns None if order book empty.
+        If the order book is unavailable, falls back to fallback_price (e.g. the
+        outcomePrices value from the Gamma events API) so paper trades still execute.
+
+        Returns:
+            {"avg_fill_price": float, "total_cost": float, "fills": list,
+             "best_ask": float, "sufficient_liquidity": bool}
+        Returns None if no order book data and no fallback_price.
         """
         order_book = self.fetch_order_book(token_id)
-        if not order_book:
-            logger.warning(f"No order book data for token {token_id}")
+
+        # If order book is unavailable, fall back to market price
+        if not order_book or not order_book.get("asks"):
+            if fallback_price is not None:
+                price = float(fallback_price)
+                total_cost = price * num_shares
+                logger.info(
+                    f"Order book unavailable for token {token_id[:12]}... "
+                    f"Using fallback price {price:.4f}"
+                )
+                return {
+                    "avg_fill_price": price,
+                    "total_cost": total_cost,
+                    "shares_filled": num_shares,
+                    "fills": [{"price": price, "shares": num_shares, "cost": total_cost}],
+                    "best_ask": price,
+                    "sufficient_liquidity": True,
+                    "used_fallback": True,
+                }
+            logger.warning(f"No order book data and no fallback for token {token_id}")
             return None
 
         asks = order_book.get("asks", [])
-        if not asks:
-            logger.warning(f"No asks in order book for token {token_id}")
-            return None
-
         try:
             fills = []
             total_cost = 0.0
@@ -85,15 +101,12 @@ class OrderBook:
             for ask in asks:
                 if shares_filled >= num_shares:
                     break
-
                 price = float(ask.get("price", 0))
                 size = float(ask.get("size", 0))
-
                 shares_to_fill = min(num_shares - shares_filled, size)
                 cost = shares_to_fill * price
                 total_cost += cost
                 shares_filled += shares_to_fill
-
                 fills.append({
                     "price": price,
                     "shares": shares_to_fill,
@@ -102,13 +115,15 @@ class OrderBook:
 
             if shares_filled < num_shares:
                 sufficient_liquidity = False
-                logger.warning(f"Insufficient liquidity for token {token_id}: requested {num_shares}, got {shares_filled}")
+                logger.warning(
+                    f"Insufficient liquidity for token {token_id}: "
+                    f"requested {num_shares}, got {shares_filled}"
+                )
 
             if shares_filled == 0:
                 return None
 
             avg_fill_price = total_cost / shares_filled if shares_filled > 0 else 0
-
             best_ask = float(asks[0].get("price", 0)) if asks else 0
 
             return {
@@ -117,9 +132,9 @@ class OrderBook:
                 "shares_filled": shares_filled,
                 "fills": fills,
                 "best_ask": best_ask,
-                "sufficient_liquidity": sufficient_liquidity
+                "sufficient_liquidity": sufficient_liquidity,
+                "used_fallback": False,
             }
-
         except (ValueError, TypeError) as e:
             logger.error(f"Error simulating buy: {e}")
             return None
