@@ -191,7 +191,7 @@ class MarketScanner:
         """Scan Polymarket for weather markets."""
         logger.info("Scanning Polymarket for weather markets...")
 
-        url = f"{GAMMA_API_BASE}/markets?active=true&closed=false&limit=500"
+        url = f"{GAMMA_API_BASE}/markets?active=true&closed=false&limit=500&q=temperature"
         data = self._make_request(url)
 
         if not data:
