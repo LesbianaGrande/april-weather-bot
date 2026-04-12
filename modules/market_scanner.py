@@ -205,6 +205,10 @@ class MarketScanner:
         if isinstance(markets, dict):
             markets = []
 
+        logger.info(f"Fetched {len(markets)} raw markets from Polymarket API")
+        if markets:
+            sample = [m.get('question', m.get('title', '?'))[:80] for m in markets[:3]]
+            logger.info(f"Sample market titles: {sample}")
         results = []
         for market in markets:
             info = self._extract_market_info(market)
