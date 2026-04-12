@@ -80,7 +80,7 @@ class Strategy1AgainstForecast(BaseStrategy):
                 shares = self.risk_manager.get_position_size(self.STRATEGY_ID, market_info.city, db)
 
                 # Simulate order book fill
-                fill_result = self.order_book.simulate_buy(market_info.no_token_id, shares)
+                fill_result = self.order_book.simulate_buy(market_info.no_token_id, shares, fallback_price=market_info.no_price)
                 if not fill_result:
                     logger.debug(f"Insufficient liquidity for {market_info.city} NO token")
                     continue
