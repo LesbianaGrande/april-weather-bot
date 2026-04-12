@@ -35,6 +35,10 @@
         .empty-state { text-align: center; padding: 40px; color: #8b949e; }
         .refresh-btn { background: #21262d; border: 1px solid #30363d; color: #58a6ff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.875rem; text-decoration: none; }
         .refresh-btn:hover { background: #30363d; }
+        .scan-btn { background: #238636; border: 1px solid #2ea043; color: #fff; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.875rem; margin-left: 8px; }
+        .scan-btn:hover { background: #2ea043; }
+        .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #scan-status { font-size: 0.8rem; margin-left: 10px; color: #8b949e; }
     </style>
 </head>
 <body>
@@ -44,6 +48,8 @@
         <p>Automated prediction market trading dashboard</p>
     </div>
     <a href="/" class="refresh-btn">Refresh</a>
+    <button class="scan-btn" id="scan-btn" onclick="runScan()">Run Scan Now</button>
+    <span id="scan-status"></span>
 </div>
 <div class="container">
     {% if error %}
@@ -167,5 +173,25 @@
         {% endif %}
     </div>
 </div>
+<script>
+async function runScan() {
+  const btn = document.getElementById('scan-btn');
+  const status = document.getElementById('scan-status');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  status.textContent = '';
+  try {
+    const resp = await fetch('/scan', { method: 'POST' });
+    const data = await resp.json();
+    status.textContent = data.message || 'Done!';
+    setTimeout(() => { status.textContent = ''; }, 5000);
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Run Scan Now';
+  }
+}
+</script>
 </body>
 </html>
