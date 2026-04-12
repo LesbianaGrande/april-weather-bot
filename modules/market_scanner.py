@@ -198,7 +198,10 @@ class MarketScanner:
             logger.error("Failed to fetch markets from Polymarket")
             return []
 
-        markets = data.get("data", data.get("markets", []))
+        if isinstance(data, list):
+            markets = data
+        else:
+            markets = data.get("data", data.get("markets", []))
         if isinstance(markets, dict):
             markets = []
 
