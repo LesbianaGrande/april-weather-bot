@@ -5,8 +5,20 @@ from database.models import Trade, DailyTradeCount
 
 
 class RiskManager:
-    """Namespace object passed to strategies; actual logic uses module-level functions."""
-    pass
+    """Risk management: position sizing and daily trade limits."""
+
+    def check_daily_trade_limit(self, strategy_id: str, city: str, market_date, db) -> bool:
+        return check_daily_trade_limit(strategy_id, city, market_date, db)
+
+    def get_position_size(self, strategy_id: str, city: str, db) -> int:
+        return get_position_size(strategy_id, city, db)
+
+    def increment_daily_trade_count(self, strategy_id: str, city: str, market_date, db):
+        return increment_daily_trade_count(strategy_id, city, market_date, db)
+
+    def get_city_loss_info(self, strategy_id: str, city: str, db) -> dict:
+        return get_city_loss_info(strategy_id, city, db)
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +35,6 @@ def get_position_size(strategy_id: str, city: str, db) -> int:
         Trade.status == "lost",
         Trade.resolved_at >= cutoff
     ).count()
-
     if losses > LOSS_THRESHOLD:
         logger.info(f"Risk reduction for {strategy_id}/{city}: {losses} losses in {LOSS_WINDOW_DAYS} days")
         return REDUCED_SHARES
@@ -41,10 +52,8 @@ def check_daily_trade_limit(strategy_id: str, city: str, market_date: date, db) 
         DailyTradeCount.market_date == market_date,
         DailyTradeCount.trade_date == today
     ).first()
-
     if count is None:
         return True
-
     return count.count < MAX_TRADES_PER_MARKET_PER_DAY
 
 
@@ -57,7 +66,6 @@ def increment_daily_trade_count(strategy_id: str, city: str, market_date: date, 
         DailyTradeCount.market_date == market_date,
         DailyTradeCount.trade_date == today
     ).first()
-
     try:
         if count is None:
             count = DailyTradeCount(
@@ -79,20 +87,17 @@ def increment_daily_trade_count(strategy_id: str, city: str, market_date: date, 
 def get_city_loss_info(strategy_id: str, city: str, db) -> dict:
     """Returns info about city's recent loss record for display."""
     cutoff = datetime.utcnow() - timedelta(days=LOSS_WINDOW_DAYS)
-
     losses = db.query(Trade).filter(
         Trade.strategy_id == strategy_id,
         Trade.city == city,
         Trade.status == "lost",
         Trade.resolved_at >= cutoff
     ).count()
-
     total = db.query(Trade).filter(
         Trade.strategy_id == strategy_id,
         Trade.city == city,
         Trade.resolved_at >= cutoff
     ).count()
-
     return {
         "losses": losses,
         "total": total,
