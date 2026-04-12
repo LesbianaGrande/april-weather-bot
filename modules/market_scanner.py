@@ -1,6 +1,7 @@
 import logging
 import requests
 import re
+import json
 from dataclasses import dataclass
 from datetime import datetime, date, timedelta
 from typing import Optional, List
@@ -58,7 +59,6 @@ class MarketScanner:
             "%d %B", "%d %b",
             "%m/%d/%Y", "%m/%d",
         ]
-
         for fmt in formats:
             try:
                 dt = datetime.strptime(date_str.strip(), fmt)
@@ -67,7 +67,6 @@ class MarketScanner:
                 return dt.date()
             except ValueError:
                 continue
-
         logger.warning(f"Could not parse date: {date_str}")
         return None
 
@@ -88,11 +87,9 @@ class MarketScanner:
             if not market_id or not question:
                 return None
 
-            # Filter: only high temperature markets
+            # Filter: only temperature markets
             question_lower = question.lower()
-            if "low temp" in question_lower or "minimum temp" in question_lower:
-                return None
-            if not ("high temp" in question_lower or "daily high" in question_lower or "high temperature" in question_lower):
+            if "temperature" not in question_lower and "temp" not in question_lower:
                 return None
 
             # Parse end_date for year inference
@@ -105,34 +102,53 @@ class MarketScanner:
                 except:
                     pass
 
-            # Try multiple regex patterns
-            patterns = [
-                r"high temperature in ([^,]+?) on ([A-Za-z]+ \d+(?:,? \d{4})?).+?(\d+(?:\.\d+)?)°([CF]) or (higher|lower)",
-                r"high temp(?:erature)? in ([^,]+?) on ([A-Za-z]+ \d+(?:,? \d{4})?).+?(\d+(?:\.\d+)?)°([CF]) or (higher|lower)",
-                r"([^:]+?): .+high.+?(\d+(?:\.\d+)?)°([CF]) or (higher|lower).+?([A-Za-z]+ \d+)",
-                r"daily high.+?in ([^,]+?) on ([A-Za-z]+ \d+(?:,? \d{4})?).+?(\d+(?:\.\d+)?)°([CF]) or (higher|lower)",
-            ]
-
             city = None
             market_date = None
             temp_threshold = None
             temp_unit = None
             direction = None
 
-            for pattern in patterns:
-                match = re.search(pattern, question, re.IGNORECASE)
-                if match:
-                    groups = match.groups()
-                    if len(groups) == 5:
-                        city, date_str, temp_str, unit, dir_str = groups
-                        temp_threshold = float(temp_str)
-                        temp_unit = unit.upper()
-                        direction = dir_str.lower()
-                        market_date = self._parse_date(date_str, fallback_year)
-                        break
+            # Primary format: "Will the highest/high temperature in CITY be N°C/F or DIRECTION on DATE?"
+            new_pat = (r"[Ww]ill the (?:highest|high) temp(?:erature)? in ([^?]+?) be"
+                       r" (\d+(?:\.\d+)?)°([CF]) or (higher|lower|above|below)"
+                       r" on ([A-Za-z]+ \d+(?:,? \d{4})?)")
+            match = re.search(new_pat, question, re.IGNORECASE)
+            if match:
+                city_raw, temp_str, unit, dir_str, date_str = match.groups()
+                city = city_raw.strip()
+                temp_threshold = float(temp_str)
+                temp_unit = unit.upper()
+                direction = dir_str.lower()
+                if direction == "above":
+                    direction = "higher"
+                elif direction == "below":
+                    direction = "lower"
+                market_date = self._parse_date(date_str, fallback_year)
+            else:
+                # Legacy formats
+                old_patterns = [
+                    (r"high temperature in ([^,]+?) on ([A-Za-z]+ \d+(?:,? \d{4})?)"
+                     r".+?(\d+(?:\.\d+)?)°([CF]) or (higher|lower)"),
+                    (r"high temp(?:erature)? in ([^,]+?) on ([A-Za-z]+ \d+(?:,? \d{4})?)"
+                     r".+?(\d+(?:\.\d+)?)°([CF]) or (higher|lower)"),
+                    (r"daily high.+?in ([^,]+?) on ([A-Za-z]+ \d+(?:,? \d{4})?)"
+                     r".+?(\d+(?:\.\d+)?)°([CF]) or (higher|lower)"),
+                ]
+                for pattern in old_patterns:
+                    match = re.search(pattern, question, re.IGNORECASE)
+                    if match:
+                        groups = match.groups()
+                        if len(groups) == 5:
+                            city, date_str, temp_str, unit, dir_str = groups
+                            temp_threshold = float(temp_str)
+                            temp_unit = unit.upper()
+                            direction = dir_str.lower()
+                            market_date = self._parse_date(date_str, fallback_year)
+                            city = city.strip()
+                            break
 
             if not all([city, market_date, temp_threshold, temp_unit, direction]):
-                logger.debug(f"Could not extract all fields from market: {market_id}")
+                logger.debug(f"Could not extract all fields from: {question[:80]}")
                 return None
 
             # Check if market is for tomorrow or day after
@@ -146,17 +162,39 @@ class MarketScanner:
             yes_price = None
             no_price = None
 
-            tokens = market.get("tokens", [])
-            for token in tokens:
-                outcome = token.get("outcome", "").upper()
-                token_id = token.get("token_id") or token.get("tokenId")
-                price = token.get("price")
-                if outcome == "YES":
-                    yes_token_id = token_id
-                    yes_price = float(price) if price else None
-                elif outcome == "NO":
-                    no_token_id = token_id
-                    no_price = float(price) if price else None
+            # Events API format: clobTokenIds + outcomePrices (both JSON strings)
+            clob_raw = market.get("clobTokenIds")
+            prices_raw = market.get("outcomePrices")
+            outcomes_raw = market.get("outcomes", '["Yes", "No"]')
+
+            if clob_raw:
+                try:
+                    clob_ids = json.loads(clob_raw) if isinstance(clob_raw, str) else clob_raw
+                    prices = json.loads(prices_raw) if isinstance(prices_raw, str) else (prices_raw or [])
+                    outcomes = json.loads(outcomes_raw) if isinstance(outcomes_raw, str) else outcomes_raw
+                    for i, outcome in enumerate(outcomes):
+                        if outcome.upper() == "YES":
+                            yes_token_id = clob_ids[i] if i < len(clob_ids) else None
+                            yes_price = float(prices[i]) if i < len(prices) else 0.5
+                        elif outcome.upper() == "NO":
+                            no_token_id = clob_ids[i] if i < len(clob_ids) else None
+                            no_price = float(prices[i]) if i < len(prices) else 0.5
+                except Exception as e:
+                    logger.debug(f"Error parsing clobTokenIds: {e}")
+
+            # Fallback: old tokens array format
+            if not yes_token_id or not no_token_id:
+                tokens = market.get("tokens", [])
+                for token in tokens:
+                    outcome = token.get("outcome", "").upper()
+                    token_id = token.get("token_id") or token.get("tokenId")
+                    price = token.get("price")
+                    if outcome == "YES":
+                        yes_token_id = token_id
+                        yes_price = float(price) if price else None
+                    elif outcome == "NO":
+                        no_token_id = token_id
+                        no_price = float(price) if price else None
 
             if not yes_token_id or not no_token_id:
                 logger.debug(f"Could not find token IDs for market: {market_id}")
@@ -168,7 +206,7 @@ class MarketScanner:
                 temp_threshold = self._fahrenheit_to_celsius(temp_threshold)
 
             return MarketInfo(
-                market_id=market_id,
+                market_id=str(market_id),
                 condition_id=condition_id,
                 question=question,
                 city=city.strip(),
@@ -183,6 +221,7 @@ class MarketScanner:
                 no_price=no_price or 0.5,
                 end_date=end_date or datetime.utcnow()
             )
+
         except Exception as e:
             logger.debug(f"Error extracting market info: {e}")
             return None
@@ -190,25 +229,26 @@ class MarketScanner:
     def scan_markets(self, db) -> List[MarketInfo]:
         """Scan Polymarket for weather markets."""
         logger.info("Scanning Polymarket for weather markets...")
-
-        url = f"{GAMMA_API_BASE}/markets?active=true&closed=false&limit=500&q=temperature"
+        url = (f"{GAMMA_API_BASE}/events/pagination"
+               f"?active=true&archived=false&closed=false"
+               f"&tag_slug=weather&limit=200&order=volume24hr&ascending=false")
         data = self._make_request(url)
-
         if not data:
-            logger.error("Failed to fetch markets from Polymarket")
+            logger.error("Failed to fetch weather events from Polymarket")
             return []
 
-        if isinstance(data, list):
-            markets = data
-        else:
-            markets = data.get("data", data.get("markets", []))
-        if isinstance(markets, dict):
-            markets = []
+        # Events pagination returns list of events, each with a "markets" array
+        events = data if isinstance(data, list) else data.get("data", [])
+        markets = []
+        for event in events:
+            for m in event.get("markets", []):
+                markets.append(m)
 
-        logger.info(f"Fetched {len(markets)} raw markets from Polymarket API")
+        logger.info(f"Fetched {len(events)} weather events, {len(markets)} total markets")
         if markets:
-            sample = [m.get('question', m.get('title', '?'))[:80] for m in markets[:3]]
-            logger.info(f"Sample market titles: {sample}")
+            sample = [m.get("question", "?")[:80] for m in markets[:3]]
+            logger.info(f"Sample market questions: {sample}")
+
         results = []
         for market in markets:
             info = self._extract_market_info(market)
@@ -260,5 +300,4 @@ class MarketScanner:
         except Exception as e:
             logger.error(f"Error clearing cache: {e}")
             db.rollback()
-
         return self.scan_markets(db)
