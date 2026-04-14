@@ -50,14 +50,15 @@ class Strategy2CheapestNo(BaseStrategy):
                     logger.debug(f"Skipping {market_info.city}: no_price {no_price:.4f} out of range")
                     continue
 
-                # Skip near-certain NO positions (poor upside, low expected value)
-                if no_price > MAX_NO_PRICE:
-                    logger.debug(f"Skipping {market_info.city}: no_price {no_price:.4f} exceeds MAX_NO_PRICE {MAX_NO_PRICE}")
-                    continue
-
                 # Try to get a live ask; if none, use outcomePrices
                 live_ask = self.order_book.get_best_ask(market_info.no_token_id)
                 rank_price = live_ask if live_ask is not None else no_price
+
+                # Skip near-certain NO positions (poor upside, low expected value)
+                # Filter on rank_price (actual fill price) not just the gamma estimate
+                if rank_price > MAX_NO_PRICE:
+                    logger.debug(f"Skipping {market_info.city}: rank_price {rank_price:.4f} exceeds MAX_NO_PRICE {MAX_NO_PRICE}")
+                    continue
 
                 candidates.append((rank_price, market_info))
             except Exception as e:
