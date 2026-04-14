@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from config.cities import is_eligible_for_strategy
-from config.settings import MAX_TRADES_PER_SCAN
+from config.settings import MAX_TRADES_PER_SCAN, MAX_NO_PRICE
 from strategies.base_strategy import BaseStrategy
 from modules.paper_wallet import execute_trade
 from sqlalchemy.orm import Session
@@ -48,6 +48,11 @@ class Strategy2CheapestNo(BaseStrategy):
                 no_price = market_info.no_price
                 if no_price <= 0 or no_price >= 1:
                     logger.debug(f"Skipping {market_info.city}: no_price {no_price:.4f} out of range")
+                    continue
+
+                # Skip near-certain NO positions (poor upside, low expected value)
+                if no_price > MAX_NO_PRICE:
+                    logger.debug(f"Skipping {market_info.city}: no_price {no_price:.4f} exceeds MAX_NO_PRICE {MAX_NO_PRICE}")
                     continue
 
                 # Try to get a live ask; if none, use outcomePrices
