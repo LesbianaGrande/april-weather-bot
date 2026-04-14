@@ -141,13 +141,14 @@ def get_recent_trades(db, limit: int = 20, strategy_id: str = None) -> list:
     for trade in trades:
         results.append({
             "id": trade.id,
-            "date": trade.opened_at.isoformat(),
+            "date": trade.opened_at.isoformat() if trade.opened_at else "",
             "strategy": trade.strategy_id,
-            "city": trade.city,
-            "question": trade.question[:50] + "..." if len(trade.question) > 50 else trade.question,
-            "shares": trade.shares,
-            "fill_price": round(trade.avg_fill_price, 4),
-            "cost": round(trade.total_cost, 2),
+            "city": trade.city or "",
+            "question": (trade.question[:60] + "...") if trade.question and len(trade.question) > 60 else (trade.question or ""),
+            "position": trade.position or "NO",
+            "shares": trade.shares or 0,
+            "fill_price": round(trade.avg_fill_price, 4) if trade.avg_fill_price else 0.0,
+            "cost": round(trade.total_cost, 2) if trade.total_cost else 0.0,
             "status": trade.status,
             "pnl": round(trade.pnl, 2) if trade.pnl else None
         })
