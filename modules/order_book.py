@@ -14,7 +14,12 @@ class OrderBook:
             try:
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+                # Polymarket CLOB returns {"error": "..."} with HTTP 200 when no orderbook exists
+                if isinstance(data, dict) and data.get("error"):
+                    logger.debug(f"CLOB API error for {url}: {data['error']}")
+                    return None
+                return data
             except Exception as e:
                 if attempt < max_retries - 1:
                     logger.warning(f"Order book request failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying...")
@@ -60,8 +65,14 @@ class OrderBook:
                      fallback_price: Optional[float] = None) -> Optional[dict]:
         """
         Simulate buying num_shares at the ask price.
-        If the order book is unavailable, falls back to fallback_price (e.g. the
-        outcomePrices value from the Gamma events API) so paper trades still execute.
+
+        The Polymarket CLOB API returns asks in DESCENDING price order
+        (most expensive first). We sort them ASCENDING (cheapest first)
+        so the simulation fills at the best available prices.
+
+        If the order book is unavailable, falls back to fallback_price
+        (e.g. the outcomePrices value from the Gamma events API) so
+        paper trades still execute.
 
         Returns:
             {"avg_fill_price": float, "total_cost": float, "fills": list,
@@ -91,7 +102,10 @@ class OrderBook:
             logger.warning(f"No order book data and no fallback for token {token_id}")
             return None
 
-        asks = order_book.get("asks", [])
+        # Sort asks ASCENDING by price (cheapest first) — CLOB API returns them descending
+        raw_asks = order_book.get("asks", [])
+        asks = sorted(raw_asks, key=lambda x: float(x.get("price", 999)))
+
         try:
             fills = []
             total_cost = 0.0
@@ -135,6 +149,7 @@ class OrderBook:
                 "sufficient_liquidity": sufficient_liquidity,
                 "used_fallback": False,
             }
+
         except (ValueError, TypeError) as e:
             logger.error(f"Error simulating buy: {e}")
             return None
