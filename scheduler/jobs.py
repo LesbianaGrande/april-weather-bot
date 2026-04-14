@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 _scheduler = BackgroundScheduler(timezone=pytz.utc)
 _strategies = []
 _resolution_checker = None
+_scan_lock = threading.Lock()   # prevents concurrent trade scans
 
 
 def setup_scheduler(strategies, resolution_checker_instance):
@@ -21,11 +23,9 @@ def setup_scheduler(strategies, resolution_checker_instance):
     _strategies = strategies
     _resolution_checker = resolution_checker_instance
 
-    # Parse hours from config
     scan_hours = ",".join(str(int(h.strip())) for h in TRADE_SCAN_HOURS.split(","))
     resolution_hours = ",".join(str(int(h.strip())) for h in RESOLUTION_CHECK_HOURS.split(","))
 
-    # Add jobs
     _scheduler.add_job(
         run_trade_scan,
         CronTrigger(hour=scan_hours, timezone="UTC"),
@@ -38,7 +38,6 @@ def setup_scheduler(strategies, resolution_checker_instance):
         id="resolution_check",
         replace_existing=True
     )
-
     logger.info(f"Scheduler setup: trade_scan at {scan_hours} UTC, resolution_check at {resolution_hours} UTC")
 
 
@@ -61,6 +60,11 @@ def get_scheduler():
 
 def run_trade_scan():
     """Execute trade scan for all strategies."""
+    # Prevent two scans from running concurrently (e.g. manual + scheduled)
+    if not _scan_lock.acquire(blocking=False):
+        logger.warning("Trade scan already in progress — skipping this trigger")
+        return
+
     logger.info("Starting trade scan job...")
     start_time = time.time()
     total_trades = 0
@@ -82,6 +86,8 @@ def run_trade_scan():
         status = "error"
         message = str(e)
         logger.error(f"Trade scan failed: {e}", exc_info=True)
+    finally:
+        _scan_lock.release()
 
     duration = time.time() - start_time
     _log_run("trade_scan", status, message, trades_executed=total_trades, duration=duration)
