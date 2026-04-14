@@ -24,6 +24,7 @@ LOSS_THRESHOLD = 2           # >2 losses triggers reduction (i.e., 3 or more)
 LOSS_WINDOW_DAYS = 3
 MAX_TRADES_PER_MARKET_PER_DAY = 2
 MAX_TRADES_PER_SCAN = 20     # Hard cap per strategy per scan to limit spending
+MAX_NO_PRICE = 0.85          # Skip NO positions above this price (near-certain, poor upside)
 STARTING_BALANCE = 10000.0
 
 TEMP_PROXIMITY_C = 2.0       # Within 2°C of forecast triggers Strategy 1
