@@ -24,7 +24,7 @@
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; padding: 8px 12px; font-size: 0.75rem; color: #8b949e; text-transform: uppercase; border-bottom: 1px solid #30363d; }
     td { padding: 10px 12px; font-size: 0.875rem; border-bottom: 1px solid #21262d; white-space: nowrap; }
-    td.wrap { white-space: normal; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+    td.wrap { white-space: normal; max-width: 260px; }
     tr:last-child td { border-bottom: none; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
     .badge-green { background: #1a3a24; color: #3fb950; } .badge-red { background: #3d1515; color: #f85149; } .badge-gray { background: #21262d; color: #8b949e; }
@@ -89,13 +89,14 @@
       <h2>Recent Trades</h2>
       {% if recent_trades %}
       <table><thead><tr>
-        <th>Time (UTC)</th><th>Strategy</th><th>Market</th><th>Side</th><th>Shares</th><th>Price</th><th>Cost</th><th>Result</th>
+        <th>Time (UTC)</th><th>Strategy</th><th>Market</th><th>Date</th><th>Side</th><th>Shares</th><th>Price</th><th>Cost</th><th>Result</th>
       </tr></thead><tbody>
       {% for trade in recent_trades %}
       <tr>
         <td>{{ trade.get('date', '')[:16] if trade.get('date') else '' }}</td>
         <td>{{ trade.get('strategy', '') }}</td>
         <td class="wrap">{{ trade.get('city', '') }}: {{ trade.get('question', '') }}</td>
+        <td style="white-space:nowrap">{{ trade.get('market_date', '') }}</td>
         <td>{% if trade.get('position', 'NO') == 'YES' %}<span class="badge badge-green">YES</span>{% else %}<span class="badge badge-red">NO</span>{% endif %}</td>
         <td>{{ trade.get('shares', 0) }}</td>
         <td>${{ "%.4f" | format(trade.get('fill_price', 0)) }}</td>
