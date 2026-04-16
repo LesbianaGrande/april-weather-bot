@@ -85,13 +85,17 @@ class ResolutionChecker:
                     trade.status = "won" if (trade.position == "NO" and resolution == "NO") or (trade.position == "YES" and resolution == "YES") else "lost"
 
                     if trade.status == "won":
+                        # PnL = revenue - cost. Cost was already deducted at trade open,
+                        # so return the full share value (1.0 per share) to the wallet.
                         pnl = trade.shares * (1.0 - trade.avg_fill_price)
+                        trade.wallet.balance += trade.shares * 1.0
                     else:
+                        # Loss: cost was already deducted when the trade was placed.
+                        # Do NOT deduct again — just record the negative PnL.
                         pnl = -trade.total_cost
 
                     trade.pnl = pnl
                     trade.resolved_at = datetime.utcnow()
-                    trade.wallet.balance += pnl
                     trade.wallet.updated_at = datetime.utcnow()
 
                     db.add(trade)
