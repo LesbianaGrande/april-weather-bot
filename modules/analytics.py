@@ -130,17 +130,15 @@ def get_daily_pnl(strategy_id: str, db, days: int = 30) -> list:
 
 def get_recent_trades(db, limit: int = 50, strategy_id: str = None) -> list:
     """Recent trades for the dashboard."""
-    from sqlalchemy import case
-
-    query = db.query(Trade)
+    # Two queries merged: settled trades first (newest resolved), then open (newest opened)
+    settled_q = db.query(Trade).filter(Trade.status.in_(["won", "lost"]))
+    open_q = db.query(Trade).filter(Trade.status == "open")
     if strategy_id:
-        query = query.filter(Trade.strategy_id == strategy_id)
-
-    # Settled trades (won/lost) surface first, then open trades newest-first
-    trades = query.order_by(
-        case([(Trade.status != 'open', 0)], else_=1),
-        Trade.opened_at.desc()
-    ).limit(limit).all()
+        settled_q = settled_q.filter(Trade.strategy_id == strategy_id)
+        open_q = open_q.filter(Trade.strategy_id == strategy_id)
+    settled = settled_q.order_by(Trade.opened_at.desc()).all()
+    open_trades = open_q.order_by(Trade.opened_at.desc()).limit(limit).all()
+    trades = (settled + open_trades)[:limit]
 
     results = []
     for trade in trades:
