@@ -57,8 +57,8 @@
         <div class="stat"><span class="stat-label">Total P&amp;L</span>
         {% set pnl1 = stats1.get('pnl', 0) %}
         <span class="stat-value {% if pnl1 >= 0 %}positive{% else %}negative{% endif %}">${{ "%.2f" | format(pnl1) }}</span></div>
-        <div class="stat"><span class="stat-label">Total Trades</span><span class="stat-value neutral">{{ stats1.get('total_trades', 0) }}</span></div>
-        <div class="stat"><span class="stat-label">Win Rate</span><span class="stat-value neutral">{{ "%.1f" | format(stats1.get('win_rate', 0)) }}%</span></div>
+        <div class="stat"><span class="stat-label">Total Trades</span><span class="stat-value neutral">{{ stats1.get('total_trades', 0) }} <small style="font-weight:normal;opacity:.7">({{ stats1.get('open_trades', 0) }} open / {{ stats1.get('won_trades', 0) }} won / {{ stats1.get('lost_trades', 0) }} lost)</small></span></div>
+        <div class="stat"><span class="stat-label">Win Rate</span><span class="stat-value neutral">{% if stats1.get('won_trades', 0) + stats1.get('lost_trades', 0) > 0 %}{{ "%.1f" | format(stats1.get('win_rate', 0)) }}%{% else %}—{% endif %}</span></div>
         <div class="stat"><span class="stat-label">Avg Cost</span><span class="stat-value neutral">${{ "%.2f" | format(stats1.get('avg_trade_cost', 0)) }}</span></div>
       </div>
       <div class="card">
@@ -69,8 +69,8 @@
         <div class="stat"><span class="stat-label">Total P&amp;L</span>
         {% set pnl2 = stats2.get('pnl', 0) %}
         <span class="stat-value {% if pnl2 >= 0 %}positive{% else %}negative{% endif %}">${{ "%.2f" | format(pnl2) }}</span></div>
-        <div class="stat"><span class="stat-label">Total Trades</span><span class="stat-value neutral">{{ stats2.get('total_trades', 0) }}</span></div>
-        <div class="stat"><span class="stat-label">Win Rate</span><span class="stat-value neutral">{{ "%.1f" | format(stats2.get('win_rate', 0)) }}%</span></div>
+        <div class="stat"><span class="stat-label">Total Trades</span><span class="stat-value neutral">{{ stats2.get('total_trades', 0) }} <small style="font-weight:normal;opacity:.7">({{ stats2.get('open_trades', 0) }} open / {{ stats2.get('won_trades', 0) }} won / {{ stats2.get('lost_trades', 0) }} lost)</small></span></div>
+        <div class="stat"><span class="stat-label">Win Rate</span><span class="stat-value neutral">{% if stats2.get('won_trades', 0) + stats2.get('lost_trades', 0) > 0 %}{{ "%.1f" | format(stats2.get('win_rate', 0)) }}%{% else %}—{% endif %}</span></div>
         <div class="stat"><span class="stat-label">Avg Cost</span><span class="stat-value neutral">${{ "%.2f" | format(stats2.get('avg_trade_cost', 0)) }}</span></div>
       </div>
       <div class="card">
